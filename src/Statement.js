@@ -346,6 +346,11 @@ export default class Statement {
 
 		walk( this.node, {
 			enter ( node, parent ) {
+
+				if (node.type === "Indentifier") {
+					console.log("identifier - " + node.name);
+				}
+
 				if ( node._skip ) return this.skip();
 
 				if ( /^Function/.test( node.type ) ) depth += 1;
@@ -374,6 +379,9 @@ export default class Statement {
 				const scope = node._scope;
 
 				if ( scope ) {
+					console.log("scope...");
+					console.log("declarations", scope.declarations);
+					console.log("names", names);
 					topLevel = false;
 
 					let newNames = blank();
@@ -435,6 +443,9 @@ export default class Statement {
 				if ( parent.type === 'FunctionExpression' ) return;
 				if ( /Function/.test( parent.type ) && ~parent.params.indexOf( node ) ) return;
 				// TODO others...?
+
+				console.log("renaming", name, node.name);
+				console.log("names", names);
 
 				// all other identifiers should be overwritten
 				magicString.overwrite( node.start, node.end, name, true );
