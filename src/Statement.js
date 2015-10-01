@@ -76,28 +76,25 @@ export default class Statement {
 				switch ( node.type ) {
 					case 'FunctionDeclaration':
 						scope.addDeclaration( node, false, false );
+					case 'FunctionExpression':
+						newScope = new Scope({
+							parent: scope,
+							block: false,
+							params: node.params
+						});
+
+						// named function expressions - the name is considered
+						// part of the function's scope
+						if ( node.type === 'FunctionExpression' && node.id ) {
+							scope.addDeclaration( node, false, false );
+						}
 						break;
 
 					case 'BlockStatement':
-						if ( parent && /Function/.test( parent.type ) ) {
-							newScope = new Scope({
-								parent: scope,
-								block: false,
-								params: parent.params
-							});
-
-							// named function expressions - the name is considered
-							// part of the function's scope
-							if ( parent.type === 'FunctionExpression' && parent.id ) {
-								newScope.addDeclaration( parent, false, false );
-							}
-						} else {
-							newScope = new Scope({
-								parent: scope,
-								block: true
-							});
-						}
-
+						newScope = new Scope({
+							parent: scope,
+							block: true
+						});
 						break;
 
 					case 'CatchClause':
@@ -340,20 +337,32 @@ export default class Statement {
 			const replacement = names[ name ];
 			deshadowList.push( replacement.split( '.' )[0] );
 		});
+		console.log("created deshadow list", deshadowList, "from", names);
 
 		let topLevel = true;
 		let depth = 0;
 
-		walk( this.node, {
-			enter ( node, parent ) {
+		console.log("new walk");
+		var tab = "";
 
-				if (node.type === "Indentifier") {
-					console.log("identifier - " + node.name);
+		walk( this.node, {
+			enter: function enter ( node, parent ) {
+
+				if (node.type === "Identifier") {
+					console.log(tab + "identifier - " + node.name);
+				}
+
+				if (parent && node === parent.id && /^Function/.test( parent.type )) {
+					return;
 				}
 
 				if ( node._skip ) return this.skip();
 
-				if ( /^Function/.test( node.type ) ) depth += 1;
+				if ( /^Function/.test( node.type ) ) {
+					console.log(tab + "into function");
+					console.log(tab, node.params);
+					depth += 1;
+				}
 
 				// `this` is undefined at the top level of ES6 modules
 				if ( node.type === 'ThisExpression' && depth === 0 ) {
@@ -376,38 +385,55 @@ export default class Statement {
 					}
 				}
 
+				if ( /^Function/.test( node.type ) && node.id ) {
+					const name = names[ node.id.name ];
+					if ( name && name !== node.id.name ) {
+
+						// all other identifiers should be overwritten
+						magicString.overwrite(node.id.start, node.id.end, name, true);
+					}
+				}
+
 				const scope = node._scope;
 
-				if ( scope ) {
-					console.log("scope...");
-					console.log("declarations", scope.declarations);
-					console.log("names", names);
+				if (scope) {
+					tab += "  ";
+					console.log(tab + "scope...");
+					console.log(tab + "declarations", scope.declarations);
+					console.log(tab + "names", names);
+					console.log(tab + "deshadowList", deshadowList);
 					topLevel = false;
 
 					let newNames = blank();
 					// Consider a scope to have replacements if there are any namespaceReplacements.
 					let hasReplacements = statement.namespaceReplacements.length > 0;
 
-					keys( names ).forEach( name => {
-						if ( !scope.declarations[ name ] ) {
-							newNames[ name ] = names[ name ];
+					keys(names).forEach(name => {
+						if (!scope.declarations[name]) {
+							newNames[name] = names[name];
 							hasReplacements = true;
 						}
 					});
 
-					deshadowList.forEach( name => {
-						if ( scope.declarations[ name ] ) {
-							newNames[ name ] = name + '$$'; // TODO better mechanism
+
+					deshadowList.forEach(name => {
+						if (scope.declarations[name]) {
+							newNames[name] = name + '$$'; // TODO better mechanism
 							hasReplacements = true;
 						}
 					});
 
-					if ( !hasReplacements && depth > 0 ) {
+					console.log(tab + "newnames", newNames);
+
+					if (!hasReplacements && depth > 0) {
+						tab += "  ";
 						return this.skip();
 					}
 
+					// reversed
+					replacementStack.push(names);
 					names = newNames;
-					replacementStack.push( newNames );
+					tab += "  ";
 				}
 
 				if ( node.type === 'MemberExpression' ) {
@@ -440,12 +466,15 @@ export default class Statement {
 				if ( parent.type === 'MemberExpression' && !parent.computed && node !== parent.object ) return;
 				if ( parent.type === 'Property' && node !== parent.value ) return;
 				if ( parent.type === 'MethodDefinition' && node === parent.key ) return;
-				if ( parent.type === 'FunctionExpression' ) return;
-				if ( /Function/.test( parent.type ) && ~parent.params.indexOf( node ) ) return;
+				//if ( parent.type === 'FunctionExpression' ) return;
+				//if ( /Function/.test( parent.type ) && parent.params.indexOf( node ) < 0 ) return;
+				//if ( /Function/.test( parent.type )) {
+				//	console.log(~parent.params.indexOf(node));
+				//}
 				// TODO others...?
 
-				console.log("renaming", name, node.name);
-				console.log("names", names);
+				console.log(tab + "renaming", node.name, "to", name);
+				console.log(tab + "names", names);
 
 				// all other identifiers should be overwritten
 				magicString.overwrite( node.start, node.end, name, true );
@@ -455,7 +484,10 @@ export default class Statement {
 				if ( /^Function/.test( node.type ) ) depth -= 1;
 
 				if ( node._scope ) {
+					console.log(tab + "popping..")
+					tab = tab.substr(0, tab.length - 4);
 					names = replacementStack.pop();
+					console.log(tab + "names now", names);
 				}
 			}
 		});

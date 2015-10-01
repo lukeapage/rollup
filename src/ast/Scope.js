@@ -46,7 +46,9 @@ export default class Scope {
 
 		if ( options.params ) {
 			options.params.forEach( param => {
+				console.log("adding params to ", this.declarations);
 				extractNames( param ).forEach( name => {
+					console.log("param adding", name);
 					this.declarations[ name ] = true;
 				});
 			});

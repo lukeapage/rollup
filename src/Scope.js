@@ -89,6 +89,8 @@ export default class Scope {
 			while ( name in names && names[ name ] !== id ) {
 				name = rename( name );
 			}
+			console.log("scope renaming", id.name, "to", name);
+
 			names[ name ] = id;
 
 			id.name = name;
