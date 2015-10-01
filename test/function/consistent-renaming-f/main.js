@@ -4,7 +4,8 @@ export default function foo() {
 };
 
 foo.prototype.a = function(foo) {
+  foo();
   return bar();
 };
 
-assert.equal( new foo().a(), 'consistent' );
+assert.equal( new foo().a(function(){}), 'consistent' );
